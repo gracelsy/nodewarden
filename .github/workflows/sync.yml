@@ -27,16 +27,16 @@ jobs:
           # 设置上游仓库URL - 请将下方URL替换为实际的上游仓库地址
           UPSTREAM_REPO_URL="${{ secrets.UPSTREAM_REPO_URL || vars.UPSTREAM_REPO_URL || 'https://github.com/shuaiplus/nodewarden.git' }}"
           
-          # 验证URL是否有效
-          if [ "$UPSTREAM_REPO_URL" = "https://github.com/UPSTREAM_OWNER/UPSTREAM_REPO.git" ]; then
-            echo "Error: Please set the correct upstream repository URL in repository secrets or variables."
-            echo "Go to Settings > Secrets and variables > Actions and add UPSTREAM_REPO_URL"
-            exit 1
-          fi
-          
           # 添加上游远程仓库
           git remote add upstream "$UPSTREAM_REPO_URL" 2>/dev/null || git remote set-url upstream "$UPSTREAM_REPO_URL"
-          git fetch upstream --all
+          
+          # 验证上游仓库连接
+          if ! git fetch upstream; then
+            echo "Failed to fetch from upstream: $UPSTREAM_REPO_URL"
+            echo "Please verify the upstream repository URL is correct."
+            exit 1
+          fi
+          echo "Successfully fetched from upstream: $UPSTREAM_REPO_URL"
 
       - name: Save local customizations
         run: |
@@ -78,11 +78,10 @@ jobs:
             echo "Applying local customizations..."
             
             # 应用保存的本地更改
-            git apply --ignore-space-change --ignore-whitespace /tmp/local-changes.patch
-            
-            # 检查是否有冲突
-            if ! git diff --quiet; then
-              echo "Applied local changes, checking for modifications..."
+            if ! git apply --ignore-space-change --ignore-whitespace /tmp/local-changes.patch; then
+              echo "Warning: Could not apply local changes cleanly. There might be conflicts."
+              echo "Conflicts shown below:"
+              git status
             fi
             
             # 清理patch文件
@@ -98,7 +97,7 @@ jobs:
             # 添加所有更改
             git add .
             
-            # 提交更改 - 使用 --amend 如果只想更新最后一次提交
+            # 提交更改
             git commit -m "Sync with upstream - preserving local customizations" --no-verify
             
             # 推送到远程仓库
